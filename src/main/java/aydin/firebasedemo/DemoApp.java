@@ -25,6 +25,7 @@ import javafx.scene.Scene;
 import javafx.stage.Stage;
 
 import java.io.IOException;
+import java.util.Objects;
 
 public class DemoApp extends Application {
     public static Scene scene;
@@ -39,6 +40,7 @@ public class DemoApp extends Application {
         fauth = FirebaseAuth.getInstance();
 
         scene = new Scene(loadFXML("primary"), 640, 480);
+        scene.getStylesheets().add(Objects.requireNonNull(DemoApp.class.getResource("style.css")).toExternalForm());
         stage.setScene(scene);
         stage.show();
     }

@@ -5,6 +5,7 @@ import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.QueryDocumentSnapshot;
 import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteResult;
+import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.UserRecord;
 import java.io.IOException;
@@ -17,141 +18,89 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Button;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 
 public class PrimaryController {
+    //Link user interface fields from primary.fxml
     @FXML
-    private TextField ageTextField;
-
-    @FXML
-    private TextField nameTextField;
+    private TextField emailTextField;
 
     @FXML
-    private TextArea outputTextArea;
+    private PasswordField passwordField;
 
-    @FXML
-    private Button readButton;
-
-    @FXML
-    private Button registerButton;
-
-    @FXML
-    private Button switchSecondaryViewButton;
-
-    @FXML
-    private Button writeButton;
-
-    private boolean key;
-    private ObservableList<Person> listOfUsers = FXCollections.observableArrayList();
-    private Person person;
-
-    public ObservableList<Person> getListOfUsers() {
-        return listOfUsers;
-    }
-
-    void initialize() {
-
-        AccessDataView accessDataViewModel = new AccessDataView();
-        nameTextField.textProperty().bindBidirectional(accessDataViewModel.personNameProperty());
-        writeButton.disableProperty().bind(accessDataViewModel.isWritePossibleProperty().not());
-    }
-
-
-    @FXML
-    void readButtonClicked(ActionEvent event) {
-        readFirebase();
-    }
-
+    //Register button click event handler
     @FXML
     void registerButtonClicked(ActionEvent event) {
         registerUser();
     }
 
-
+    //Sign-in button click event handler
     @FXML
-    void writeButtonClicked(ActionEvent event) {
-        addData();
+    void signinButtonClicked(ActionEvent event) {
+        signinUser();
     }
 
-    @FXML
-    private void switchToSecondary() throws IOException {
-        DemoApp.setRoot("secondary");
-    }
-    public boolean readFirebase()
-    {
-        key = false;
+    //Register new user with Firebase Authentication
+    private void registerUser() {
+        String email = emailTextField.getText().trim();
+        String password = passwordField.getText();
 
-        //asynchronously retrieve all documents
-        ApiFuture<QuerySnapshot> future =  DemoApp.fstore.collection("Persons").get();
-        // future.get() blocks on response
-        List<QueryDocumentSnapshot> documents;
-        try
-        {
-            documents = future.get().getDocuments();
-            if(documents.size()>0)
-            {
-                System.out.println("Getting (reading) data from firabase database....");
-                listOfUsers.clear();
-                for (QueryDocumentSnapshot document : documents)
-                {
-                    outputTextArea.setText(outputTextArea.getText()+ document.getData().get("Name")+ " , Age: "+
-                            document.getData().get("Age")+ " \n ");
-                    System.out.println(document.getId() + " => " + document.getData().get("Name"));
-                    person  = new Person(String.valueOf(document.getData().get("Name")),
-                            Integer.parseInt(document.getData().get("Age").toString()));
-                    listOfUsers.add(person);
-                }
-            }
-            else
-            {
-                System.out.println("No data");
-            }
-            key=true;
-
+        //Validate email format
+        if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$")) {
+            showAlert("Error", "Invalid email format");
+            return;
         }
-        catch (InterruptedException | ExecutionException ex)
-        {
-            ex.printStackTrace();
+
+        //Validate non-empty fields
+        if (email.isEmpty() || password.isEmpty()) {
+            showAlert("Error", "Email and password are required");
+            return;
         }
-        return key;
-    }
 
-    public boolean registerUser() {
-        UserRecord.CreateRequest request = new UserRecord.CreateRequest()
-                .setEmail("user222@example.com")
-                .setEmailVerified(false)
-                .setPassword("secretPassword")
-                .setPhoneNumber("+11234567890")
-                .setDisplayName("John Doe")
-                .setDisabled(false);
-
-        UserRecord userRecord;
+        //Create user account in Firebase
         try {
-            userRecord = DemoApp.fauth.createUser(request);
-            System.out.println("Successfully created new user with Firebase Uid: " + userRecord.getUid()
-            + " check Firebase > Authentication > Users tab");
-            return true;
+            UserRecord.CreateRequest request = new UserRecord.CreateRequest()
+                    .setEmail(email)
+                    .setPassword(password)
+                    .setDisplayName(email.split("@")[0]);
 
-        } catch (FirebaseAuthException ex) {
-            // Logger.getLogger(FirestoreContext.class.getName()).log(Level.SEVERE, null, ex);
-            System.out.println("Error creating a new user in the firebase");
-            return false;
+                     UserRecord userRecord = FirebaseAuth.getInstance().createUser(request);
+                     showAlert("Success", "User Registered: " + userRecord.getUid());
         }
-
+        catch (FirebaseAuthException e) {
+            showAlert("Error", "Error registering user: " + e.getMessage());
+        }
     }
 
-    public void addData() {
+    //Handle user sign-n
+    private void signinUser() {
+        String email = emailTextField.getText();
+        String password = passwordField.getText();
 
-        DocumentReference docRef = DemoApp.fstore.collection("Persons").document(UUID.randomUUID().toString());
+        if (email.isEmpty() || password.isEmpty()) {
+            showAlert("Error", "Email and password are required");
+            return;
+        }
 
-        Map<String, Object> data = new HashMap<>();
-        data.put("Name", nameTextField.getText());
-        data.put("Age", Integer.parseInt(ageTextField.getText()));
+        try {
+            //Verify if user already exists on firebase
+            UserRecord userRecord = FirebaseAuth.getInstance().getUserByEmail(email);
+            showAlert("Success", "User Signed In: " + userRecord.getDisplayName());
 
-        //asynchronously write data
-        ApiFuture<WriteResult> result = docRef.set(data);
+            //Navigate to secondary screen
+            DemoApp.setRoot("secondary");
+        }
+        catch (FirebaseAuthException | IOException e) {
+            showAlert("Error", "Invalid credentials");
+        }
+    }
+
+    //Display an alert box
+    private void showAlert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 }
